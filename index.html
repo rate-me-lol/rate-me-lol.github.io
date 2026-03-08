@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>rate me lol</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            font-family: monospace;
+        }
+        
+        #board {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+        }
+        
+        .review {
+            position: absolute;
+            padding: 10px;
+            background: #ffeb3b;
+            max-width: 150px;
+            font-size: 12px;
+        }
+        
+        .review textarea {
+            border: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: inherit;
+            resize: none;
+            outline: none;
+            width: 130px;
+            height: 60px;
+            pointer-events: none;
+        }
+        
+        .review textarea:not(:disabled) {
+            pointer-events: auto;
+        }
+        
+        .review textarea:disabled {
+            color: #000;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="board"></div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        const supabaseUrl = 'https://fmwczzxecngzafwhtqof.supabase.co';
+        // it's public key for a reason so it's save to share..... right... 
+        const supabaseKey = 'sb_publishable_n8etIYjazT5jckPM3V8_iA_Lv4VSaN7';
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        let userId;
+        
+        async function initAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            if (session) {
+                userId = session.user.id;
+            } else {
+                const { data, error } = await supabase.auth.signInAnonymously();
+                if (error) {
+                    console.error('Auth error:', error);
+                    return;
+                }
+                userId = data.user.id;
+            }
+        }
+
+        await initAuth();
+
+        let activeNote = null;
+
+        async function loadNotes() {
+            const { data } = await supabase.from('notes').select('*');
+            if (data) {
+                data.forEach(note => {
+                    createNote(note.x, note.y, note.text, note.rotation, note.owner, note.id, false);
+                });
+            }
+        }
+
+        async function saveNote(x, y, text, rotation) {
+            const { data, error } = await supabase.from('notes').insert([
+                { x, y, text, rotation, owner: userId }
+            ]).select();
+            if (error) console.error('sav error:', error);
+            return data ? data[0].id : null;
+        }
+
+        async function updateNote(id, text) {
+            const { error } = await supabase.from('notes').update({ text }).eq('id', id);
+            if (error) console.error('upd error:', error);
+        }
+
+        async function deleteNote(id) {
+            const { error } = await supabase.from('notes').delete().eq('id', id);
+            if (error) console.error('del error:', error);
+        }
+
+        function createNote(x, y, text, rotation, owner, dbId, isNew) {
+            let state = { isNew, dbId };
+
+            let note = document.createElement('div');
+            note.className = 'review';
+            note.dataset.owner = owner;
+            note.style.top = y + 'px';
+            note.style.left = x + 'px';
+            note.style.transform = 'rotate(' + rotation + 'deg)';
+            
+            let input = document.createElement('textarea');
+            input.placeholder = 'write here...';
+            input.value = text;
+            if (!isNew) input.disabled = true;
+            
+            note.appendChild(input);
+            board.appendChild(note);
+            
+            if (isNew) {
+                input.focus();
+                activeNote = input;
+            }
+            
+            input.onkeydown = async function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (input.value.trim()) {
+                        if (state.isNew) {
+                            const id = await saveNote(x, y, input.value, rotation);
+                            state.dbId = id;
+                            state.isNew = false;
+                        } else {
+                            await updateNote(state.dbId, input.value);
+                        }
+                        input.disabled = true;
+                        activeNote = null;
+                    } else {
+                        if (!state.isNew) {
+                            await deleteNote(state.dbId);
+                        }
+                        note.remove();
+                        activeNote = null;
+                    }
+                }
+            };
+        }
+
+        board.onclick = function(e) {
+            let note = e.target.closest('.review');
+            
+            if (note) {
+                let input = note.querySelector('textarea');
+                if (note.dataset.owner === userId && input.disabled && !activeNote) {
+                    input.disabled = false;
+                    input.focus();
+                    activeNote = input;
+                }
+                return;
+            }
+            
+            if (e.target !== board) return;
+            if (activeNote) return;
+            
+            const rotation = Math.random() * 6 - 3;
+            createNote(e.clientX, e.clientY, '', rotation, userId, null, true);
+        };
+
+        loadNotes();
+    </script>
+</body>
+</html>
