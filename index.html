@@ -7,6 +7,7 @@
             margin: 0;
             background: #000;
             font-family: monospace;
+            overflow: hidden;
         }
         
         #board {
@@ -32,26 +33,46 @@
             resize: none;
             outline: none;
             width: 130px;
-            height: 60px;
-            pointer-events: none;
-        }
-        
-        .review textarea:not(:disabled) {
-            pointer-events: auto;
+            min-height: 40px;
+            overflow: hidden;
         }
         
         .review textarea:disabled {
             color: #000;
             opacity: 1;
+            pointer-events: none;
+        }
+        
+        #guide {
+            position: fixed;
+            bottom: 14px;
+            right: 14px;
+            color: #999;
+            font-family: monospace;
+            font-size: 11px;
+            line-height: 1.8;
+            z-index: 999;
+            pointer-events: none;
+            user-select: none;
+            text-align: right;
+        }
+        
+        #guide b {
+            color: #fff;
+            font-weight: normal;
         }
     </style>
 </head>
 <body>
     <div id="board"></div>
+    <div id="guide">
+        <b>click</b> -> new note * <b>click yours</b> -> edit<br>
+        <b>enter</b> -> save * <b>empty + enter</b> -> delete
+    </div>
 
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
+        
         const supabaseUrl = 'https://fmwczzxecngzafwhtqof.supabase.co';
         // it's public key for a reason so it's save to share..... right... 
         const supabaseKey = 'sb_publishable_n8etIYjazT5jckPM3V8_iA_Lv4VSaN7';
@@ -77,6 +98,11 @@
         await initAuth();
 
         let activeNote = null;
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
 
         async function loadNotes() {
             const { data } = await supabase.from('notes').select('*');
@@ -122,6 +148,10 @@
             
             note.appendChild(input);
             board.appendChild(note);
+            
+            requestAnimationFrame(() => autoResize(input));
+            
+            input.addEventListener('input', () => autoResize(input));
             
             if (isNew) {
                 input.focus();
